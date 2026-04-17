@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>藏經閣：古義推箱</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+
+        :root {
+            --primary-font: 'ZCOOL KuaiLe', 'Microsoft JhengHei', sans-serif;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: #1a1a1d;
+            font-family: var(--primary-font);
+            /* 防止手機端長按彈出選單 */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative; width: 100vw; height: 100vh;
+            background: radial-gradient(circle, #3e2723 0%, #1a1a1d 100%);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: space-between;
+            padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+        }
+
+        canvas { 
+            image-rendering: pixelated; 
+            border: 8px solid #5d4037;
+            border-image: linear-gradient(to bottom, #8b4513, #5d4037) 1;
+            box-shadow: 0 0 40px rgba(0,0,0,0.6);
+            background: #3e2723;
+            max-width: 90vw;
+            max-height: 50vh;
+            touch-action: none;
+        }
+
+        .ui-header {
+            width: 95%; max-width: 500px;
+            padding: 10px; display: flex;
+            justify-content: space-between; align-items: center;
+            color: #f1c40f;
+        }
+
+        .controls-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 10px; margin-bottom: 20px;
+        }
+
+        .btn-ctrl {
+            width: 70px; height: 70px;
+            background: #5d4037; border: none;
+            border-bottom: 4px solid #3e2723;
+            color: #f1c40f; border-radius: 15px;
+            font-size: 32px; display: flex;
+            align-items: center; justify-content: center;
+            transition: transform 0.05s, background 0.1s;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn-ctrl:active {
+            transform: translateY(2px);
+            background: #795548;
+            border-bottom-width: 1px;
+        }
+
+        .screen-overlay {
+            position: absolute; inset: 0;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 100; text-align: center; color: #f1c40f;
+            padding: 20px;
+        }
+
+        .btn-menu {
+            background: #8b4513; color: white;
+            padding: 12px 30px; margin: 8px;
+            border-radius: 12px; font-size: 20px;
+            cursor: pointer; border: 2px solid #f1c40f;
+            box-shadow: 0 4px 0 #5d4037;
+            width: 220px;
+            transition: 0.2s;
+        }
+
+        .status-badge {
+            background: rgba(93, 64, 55, 0.8); padding: 4px 10px;
+            border-radius: 6px; border: 1px solid #f1c40f;
+            font-size: 14px;
+        }
+
+        .victory-title {
+            font-size: clamp(32px, 8vw, 56px);
+            background: linear-gradient(to bottom, #fff176, #fbc02d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: celebrate 1s infinite alternate;
+        }
+
+        @keyframes celebrate {
+            from { transform: scale(0.95); }
+            to { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- 頂部資訊欄 -->
+        <div class="ui-header">
+            <button class="bg-amber-900 text-white px-3 py-1 rounded text-sm border border-amber-600" onclick="exitToMenu()">退出</button>
+            <div class="flex gap-2">
+                <div class="status-badge">難度: <span id="ui-difficulty">--</span></div>
+                <div class="status-badge">步數: <span id="ui-steps">0</span></div>
+            </div>
+            <button class="bg-red-900 text-white px-3 py-1 rounded text-sm border border-red-600" onclick="resetLevel()">重置</button>
+        </div>
+
+        <!-- 遊戲畫布 -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- 虛擬按鍵 (移動端專用) -->
+        <div class="controls-grid">
+            <div></div>
+            <button class="btn-ctrl" onmousedown="handleInput('up')" ontouchstart="handleInput('up')">▲</button>
+            <div></div>
+            <button class="btn-ctrl" onmousedown="handleInput('left')" ontouchstart="handleInput('left')">◀</button>
+            <button class="btn-ctrl" onmousedown="handleInput('down')" ontouchstart="handleInput('down')">▼</button>
+            <button class="btn-ctrl" onmousedown="handleInput('right')" ontouchstart="handleInput('right')">▶</button>
+        </div>
+
+        <!-- 開始畫面 -->
+        <div id="start-screen" class="screen-overlay">
+            <h1 class="text-5xl md:text-6xl mb-2 font-bold tracking-widest text-amber-500">藏經閣</h1>
+            <p class="text-lg md:text-xl mb-8 text-amber-200">古義推箱解謎</p>
+            <div class="flex flex-col">
+                <button class="btn-menu" onclick="initGame('easy')">簡單・入學</button>
+                <button class="btn-menu" onclick="initGame('medium')">中等・鄉試</button>
+                <button class="btn-menu" onclick="initGame('hard')">困難・殿試</button>
+            </div>
+            <p class="mt-8 text-amber-700 text-xs">電腦可用方向鍵 | R鍵重置 | ESC退出</p>
+        </div>
+
+        <!-- 勝利畫面 -->
+        <div id="win-screen" class="screen-overlay" style="display:none">
+            <div class="mb-2 text-amber-400 text-lg">賀！</div>
+            <h2 class="victory-title mb-4" id="honor-title">及第登科</h2>
+            <p id="win-msg" class="text-xl mb-10 text-amber-100"></p>
+            <button class="btn-menu" onclick="exitToMenu()">返回主選單</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiSteps = document.getElementById('ui-steps');
+        const uiDiff = document.getElementById('ui-difficulty');
+        
+        const TILE_SIZE = 64;
+        const GRID_W = 8;
+        const GRID_H = 8;
+
+        const QUESTION_BANK = [
+            { word: "走", meaning: "跑" }, { word: "去", meaning: "離開" },
+            { word: "湯", meaning: "熱水" }, { word: "卑鄙", meaning: "身分低" },
+            { word: "假", meaning: "憑藉" }, { word: "謝", meaning: "認錯" },
+            { word: "交通", meaning: "交錯" }, { word: "妻子", meaning: "妻與子" },
+            { word: "絕境", meaning: "隔絕地" }, { word: "無論", meaning: "更不必" },
+            { word: "行李", meaning: "使者" }, { word: "爪牙", meaning: "武士" },
+            { word: "結束", meaning: "整裝" }, { word: "故事", meaning: "舊例" },
+            { word: "顏色", meaning: "臉色" }, { word: "親戚", meaning: "內外親" },
+            { word: "地方", meaning: "土地方" }, { word: "所以", meaning: "用來" },
+            { word: "可以", meaning: "能憑藉" }, { word: "布衣", meaning: "平民" },
+            { word: "更衣", meaning: "入廁" }, { word: "便宜", meaning: "合適" },
+            { word: "往往", meaning: "到處" }, { word: "感激", meaning: "感奮" },
+            { word: "烈士", meaning: "有志者" }, { word: "用心", meaning: "思想" },
+            { word: "河", meaning: "黃河" }, { word: "江", meaning: "長江" },
+            { word: "偷生", meaning: "苟活" }, { word: "犧牲", meaning: "祭品" }
+        ];
+
+        const MAP_LAYOUTS = {
+            easy: [[1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,1],[1,0,2,0,0,3,0,1],[1,0,0,0,0,0,0,1],[1,0,0,4,0,0,0,1],[1,0,3,0,0,2,0,1],[1,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1]],
+            medium: [[1,1,1,1,1,1,1,1],[1,2,0,1,0,0,0,1],[1,0,3,1,0,3,0,1],[1,0,0,0,0,1,0,1],[1,1,1,0,4,0,0,1],[1,0,0,0,1,1,0,1],[1,0,2,0,0,0,0,1],[1,1,1,1,1,1,1,1]],
+            hard: [[1,1,1,1,1,1,1,1],[1,2,3,0,0,1,2,1],[1,0,1,1,0,1,0,1],[1,0,0,3,0,0,0,1],[1,0,1,0,4,1,3,1],[1,0,0,0,0,0,0,1],[1,2,0,1,1,1,0,1],[1,1,1,1,1,1,1,1]]
+        };
+
+        let gameState = {
+            grid: [], player: {x:0, y:0, dir: 'down', anim: 0},
+            steps: 0, targets: [], boxes: [], difficulty: '',
+            isRunning: false, honor: '', lastInputTime: 0
+        };
+
+        function shuffle(array) { return array.sort(() => Math.random() - 0.5); }
+
+        function handleInput(dir) {
+            const now = Date.now();
+            if (now - gameState.lastInputTime < 150) return; // 防止重複點擊過快
+            gameState.lastInputTime = now;
+
+            if (dir === 'up') movePlayer(0, -1);
+            if (dir === 'down') movePlayer(0, 1);
+            if (dir === 'left') movePlayer(-1, 0);
+            if (dir === 'right') movePlayer(1, 0);
+        }
+
+        function initGame(diff) {
+            gameState.difficulty = diff;
+            uiDiff.innerText = diff === 'easy' ? '秀才' : (diff === 'medium' ? '舉人' : '狀元');
+            gameState.honor = uiDiff.innerText;
+            document.getElementById('start-screen').style.display = 'none';
+            resetLevel();
+            gameState.isRunning = true;
+            gameLoop();
+        }
+
+        function resetLevel() {
+            const layout = JSON.parse(JSON.stringify(MAP_LAYOUTS[gameState.difficulty]));
+            gameState.grid = layout;
+            gameState.steps = 0;
+            uiSteps.innerText = "0";
+            gameState.targets = [];
+            gameState.boxes = [];
+
+            const qCount = gameState.difficulty === 'hard' ? 3 : 2;
+            const selectedQ = shuffle([...QUESTION_BANK]).slice(0, qCount);
+            const shuffledMeanings = shuffle(selectedQ.map(q => q.meaning));
+
+            let tIdx = 0, bIdx = 0;
+            for(let y=0; y<GRID_H; y++) {
+                for(let x=0; x<GRID_W; x++) {
+                    if(gameState.grid[y][x] === 4) {
+                        gameState.player = {x, y, dir: 'down', anim: 0};
+                        gameState.grid[y][x] = 0;
+                    }
+                    if(gameState.grid[y][x] === 2) {
+                        gameState.targets.push({x, y, word: selectedQ[tIdx].word, correct: selectedQ[tIdx].meaning});
+                        tIdx++;
+                    }
+                    if(gameState.grid[y][x] === 3) {
+                        gameState.boxes.push({x, y, meaning: shuffledMeanings[bIdx]});
+                        gameState.grid[y][x] = 0;
+                        bIdx++;
+                    }
+                }
+            }
+        }
+
+        function exitToMenu() {
+            gameState.isRunning = false;
+            document.getElementById('start-screen').style.display = 'flex';
+            document.getElementById('win-screen').style.display = 'none';
+        }
+
+        function movePlayer(dx, dy) {
+            if (!gameState.isRunning || document.getElementById('win-screen').style.display === 'flex') return;
+
+            if (dx > 0) gameState.player.dir = 'right';
+            else if (dx < 0) gameState.player.dir = 'left';
+            else if (dy > 0) gameState.player.dir = 'down';
+            else if (dy < 0) gameState.player.dir = 'up';
+
+            const nx = gameState.player.x + dx;
+            const ny = gameState.player.y + dy;
+
+            if(ny < 0 || ny >= GRID_H || nx < 0 || nx >= GRID_W || gameState.grid[ny][nx] === 1) return;
+
+            let box = gameState.boxes.find(b => b.x === nx && b.y === ny);
+            if(box) {
+                const bnx = nx + dx;
+                const bny = ny + dy;
+                if(bny < 0 || bny >= GRID_H || bnx < 0 || bnx >= GRID_W || gameState.grid[bny][bnx] === 1 || gameState.boxes.find(b => b.x === bnx && b.y === bny)) return;
+                box.x = bnx;
+                box.y = bny;
+                gameState.player.x = nx;
+                gameState.player.y = ny;
+                gameState.steps++;
+                checkWin();
+            } else {
+                gameState.player.x = nx;
+                gameState.player.y = ny;
+                gameState.steps++;
+            }
+            uiSteps.innerText = gameState.steps;
+        }
+
+        function checkWin() {
+            let win = gameState.targets.every(t => {
+                const box = gameState.boxes.find(b => b.x === t.x && b.y === t.y);
+                return box && box.meaning === t.correct;
+            });
+
+            if(win) {
+                gameState.isRunning = false;
+                setTimeout(() => {
+                    document.getElementById('honor-title').innerText = `獲封：${gameState.honor}`;
+                    document.getElementById('win-msg').innerText = `僅用 ${gameState.steps} 步即完成挑戰！`;
+                    document.getElementById('win-screen').style.display = 'flex';
+                }, 300);
+            }
+        }
+
+        function drawWall(ctx, x, y) {
+            const tx = x * TILE_SIZE, ty = y * TILE_SIZE;
+            ctx.fillStyle = "#5d4037"; ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = "#3e2723"; ctx.fillRect(tx + 4, ty + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+            ctx.fillStyle = "#8b4513"; ctx.fillRect(tx + 8, ty + 12, TILE_SIZE - 16, 6);
+            ctx.fillRect(tx + 8, ty + 38, TILE_SIZE - 16, 6);
+        }
+
+        function drawScholar(ctx, x, y, dir, anim) {
+            const tx = x * TILE_SIZE + TILE_SIZE / 2, ty = y * TILE_SIZE + TILE_SIZE / 2;
+            const bounce = Math.sin(anim * 0.15) * 2;
+            ctx.save();
+            ctx.translate(tx, ty + bounce);
+            ctx.fillStyle = "#3949ab"; ctx.fillRect(-15, -4, 30, 24); 
+            ctx.fillStyle = "#ffe0bd"; ctx.fillRect(-10, -22, 20, 18);
+            ctx.fillStyle = "#000";
+            if (dir !== 'up') {
+                const off = dir === 'left' ? -2 : (dir === 'right' ? 2 : 0);
+                ctx.fillRect(-5 + off, -15, 3, 3); ctx.fillRect(2 + off, -15, 3, 3);
+            }
+            ctx.fillStyle = "#1a237e"; ctx.fillRect(-12, -28, 24, 8);
+            ctx.restore();
+        }
+
+        function drawBox(ctx, x, y, text) {
+            const tx = x * TILE_SIZE + 4, ty = y * TILE_SIZE + 4, size = TILE_SIZE - 8;
+            ctx.fillStyle = "#a0522d"; ctx.fillRect(tx, ty, size, size);
+            ctx.strokeStyle = "#fbc02d"; ctx.lineWidth = 2; ctx.strokeRect(tx+2, ty+2, size-4, size-4);
+            ctx.fillStyle = "#fff"; ctx.font = "bold 14px var(--primary-font)";
+            ctx.textAlign = "center"; ctx.fillText(text, tx + size / 2, ty + size / 2 + 5);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for(let y=0; y<GRID_H; y++) {
+                for(let x=0; x<GRID_W; x++) {
+                    const tx = x * TILE_SIZE, ty = y * TILE_SIZE;
+                    ctx.fillStyle = "#3e2723"; ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = "#2b1b17"; ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+                    if(gameState.grid[y][x] === 1) drawWall(ctx, x, y);
+                }
+            }
+            gameState.targets.forEach(t => {
+                ctx.fillStyle = "rgba(241, 196, 15, 0.3)";
+                ctx.beginPath(); ctx.arc(t.x*TILE_SIZE+32, t.y*TILE_SIZE+32, 20, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#f1c40f"; ctx.font = "bold 16px var(--primary-font)";
+                ctx.textAlign = "center"; ctx.fillText(t.word, t.x*TILE_SIZE+32, t.y*TILE_SIZE+38);
+            });
+            gameState.boxes.forEach(b => drawBox(ctx, b.x, b.y, b.meaning));
+            drawScholar(ctx, gameState.player.x, gameState.player.y, gameState.player.dir, gameState.player.anim);
+        }
+
+        function gameLoop() {
+            if (!gameState.isRunning) return;
+            gameState.player.anim++;
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('keydown', e => {
+            if(!gameState.isRunning) return;
+            const keys = {'ArrowUp':'up','w':'up','ArrowDown':'down','s':'down','ArrowLeft':'left','a':'left','ArrowRight':'right','d':'right'};
+            if(keys[e.key]) handleInput(keys[e.key]);
+            if(e.key.toLowerCase() === 'r') resetLevel();
+            if(e.key === 'Escape') exitToMenu();
+        });
+
+        window.onload = () => {
+            canvas.width = TILE_SIZE * GRID_W;
+            canvas.height = TILE_SIZE * GRID_H;
+            // 禁止頁面滑動（針對 iOS）
+            document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+        };
+    </script>
+</body>
+</html>
